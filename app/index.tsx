@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import YoutubePlayer from "react-native-youtube-iframe";
+import { useFocusEffect } from "@react-navigation/native";
 
 interface Lesson {
   id: string;
@@ -51,6 +52,16 @@ const LessonsScreen: React.FC = () => {
     fetchLessons();
   }, [fetchLessons]);
 
+  useFocusEffect(
+    useCallback(() => {
+      // This effect runs when the screen comes into focus
+      return () => {
+        // This cleanup function runs when the screen goes out of focus
+        setPlayingLesson(null);
+      };
+    }, []),
+  );
+
   const extractVideoId = (url: string): string | null => {
     const regExp =
       /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
@@ -60,6 +71,12 @@ const LessonsScreen: React.FC = () => {
 
   const playVideo = useCallback((lesson: Lesson): void => {
     setPlayingLesson(lesson);
+  }, []);
+
+  const onStateChange = useCallback((state: string) => {
+    if (state === "ended") {
+      setPlayingLesson(null);
+    }
   }, []);
 
   const renderVideoPlayer = () => {
@@ -75,6 +92,7 @@ const LessonsScreen: React.FC = () => {
           width={width}
           play={true}
           videoId={videoId}
+          onChangeState={onStateChange}
         />
         <View style={styles.videoInfo}>
           <Text style={styles.videoTitle}>{playingLesson.title}</Text>
@@ -133,7 +151,6 @@ const LessonsScreen: React.FC = () => {
     </SafeAreaView>
   );
 };
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
