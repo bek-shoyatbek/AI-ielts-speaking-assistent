@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -8,11 +8,7 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Animated,
-  ListRenderItem,
-  Modal,
   SafeAreaView,
-  StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import YoutubePlayer from "react-native-youtube-iframe";
@@ -23,20 +19,15 @@ interface Lesson {
   description: string;
   youtubeLink: string;
   thumbnailUrl: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
-const { width, height } = Dimensions.get("window");
+const { width } = Dimensions.get("window");
 
 const LessonsScreen: React.FC = () => {
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
-  const [modalVisible, setModalVisible] = useState<boolean>(false);
-  const [selectedVideoId, setSelectedVideoId] = useState<string | null>(null);
-  const spinValue = useRef(new Animated.Value(0)).current;
+  const [playingLesson, setPlayingLesson] = useState<Lesson | null>(null);
 
   const fetchLessons = useCallback(async (): Promise<void> => {
     try {
@@ -53,30 +44,12 @@ const LessonsScreen: React.FC = () => {
       setError("Failed to fetch lessons. Please try again later.");
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     fetchLessons();
   }, [fetchLessons]);
-
-  const onRefresh = useCallback((): void => {
-    setRefreshing(true);
-    fetchLessons();
-    Animated.loop(
-      Animated.timing(spinValue, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-    ).start();
-  }, [fetchLessons, spinValue]);
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
 
   const extractVideoId = (url: string): string | null => {
     const regExp =
@@ -85,45 +58,54 @@ const LessonsScreen: React.FC = () => {
     return match && match[2].length === 11 ? match[2] : null;
   };
 
-  const playVideo = useCallback((youtubeLink: string): void => {
-    const videoId = extractVideoId(youtubeLink);
-    if (videoId) {
-      setSelectedVideoId(videoId);
-      setModalVisible(true);
-    } else {
-      console.error("Invalid YouTube URL");
-    }
+  const playVideo = useCallback((lesson: Lesson): void => {
+    setPlayingLesson(lesson);
   }, []);
 
-  const closeVideo = useCallback((): void => {
-    setModalVisible(false);
-    setSelectedVideoId(null);
-  }, []);
+  const renderVideoPlayer = () => {
+    if (!playingLesson) return null;
 
-  const renderItem: ListRenderItem<Lesson> = useCallback(
-    ({ item }) => (
-      <View style={styles.lessonItem}>
+    const videoId = extractVideoId(playingLesson.youtubeLink);
+    if (!videoId) return null;
+
+    return (
+      <View style={styles.videoSection}>
+        <YoutubePlayer
+          height={width * 0.5625}
+          width={width}
+          play={true}
+          videoId={videoId}
+        />
+        <View style={styles.videoInfo}>
+          <Text style={styles.videoTitle}>{playingLesson.title}</Text>
+          <Text style={styles.videoDescription}>
+            {playingLesson.description}
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
+  const renderItem = ({ item }: { item: Lesson }) => (
+    <View style={styles.lessonItem}>
+      <TouchableOpacity onPress={() => playVideo(item)}>
         <Image
           source={{ uri: item.thumbnailUrl }}
           style={styles.thumbnail}
           resizeMode="cover"
         />
-        <TouchableOpacity
-          style={styles.playButton}
-          onPress={() => playVideo(item.youtubeLink)}
-        >
+        <View style={styles.playButton}>
           <Ionicons name="play-circle" size={60} color="white" />
-        </TouchableOpacity>
-        <View style={styles.textContainer}>
-          <Text style={styles.lessonTitle}>{item.title}</Text>
-          <Text style={styles.lessonDescription}>{item.description}</Text>
         </View>
+      </TouchableOpacity>
+      <View style={styles.textContainer}>
+        <Text style={styles.lessonTitle}>{item.title}</Text>
+        <Text style={styles.lessonDescription}>{item.description}</Text>
       </View>
-    ),
-    [playVideo],
+    </View>
   );
 
-  if (loading && !refreshing) {
+  if (loading) {
     return (
       <View style={styles.centerContainer}>
         <ActivityIndicator size="large" color="#4A90E2" />
@@ -131,7 +113,7 @@ const LessonsScreen: React.FC = () => {
     );
   }
 
-  if (error && lessons.length === 0) {
+  if (error) {
     return (
       <View style={styles.centerContainer}>
         <Text>{error}</Text>
@@ -141,42 +123,13 @@ const LessonsScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <FlatList<Lesson>
+      {renderVideoPlayer()}
+      <FlatList
         data={lessons}
         renderItem={renderItem}
         keyExtractor={(item) => item.id}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
-        refreshControl={
-          <Animated.View style={styles.refreshControl}>
-            <Animated.View style={{ transform: [{ rotate: spin }] }}>
-              <Ionicons name="refresh" size={24} color="#4A90E2" />
-            </Animated.View>
-          </Animated.View>
-        }
+        contentContainerStyle={styles.listContainer}
       />
-      <Modal
-        animationType="slide"
-        transparent={false}
-        visible={modalVisible}
-        onRequestClose={closeVideo}
-      >
-        <SafeAreaView style={styles.videoContainer}>
-          {selectedVideoId && (
-            <View style={styles.playerWrapper}>
-              <YoutubePlayer
-                height={width * 0.5625} // 16:9 aspect ratio
-                width={width}
-                play={true}
-                videoId={selectedVideoId}
-              />
-            </View>
-          )}
-          <TouchableOpacity style={styles.closeButton} onPress={closeVideo}>
-            <Ionicons name="close-circle" size={40} color="white" />
-          </TouchableOpacity>
-        </SafeAreaView>
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -185,16 +138,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#f0f0f0",
-    paddingTop: StatusBar.currentHeight,
   },
   centerContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
+  videoSection: {
+    backgroundColor: "white",
+    marginBottom: 20,
+  },
+  videoInfo: {
+    padding: 15,
+  },
+  videoTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 5,
+    color: "#333",
+  },
+  videoDescription: {
+    fontSize: 14,
+    color: "#666",
+  },
+  listContainer: {
+    padding: 10,
+  },
   lessonItem: {
     marginBottom: 20,
-    marginHorizontal: 10,
     borderRadius: 10,
     backgroundColor: "white",
     shadowColor: "#000",
@@ -230,31 +201,6 @@ const styles = StyleSheet.create({
   lessonDescription: {
     fontSize: 14,
     color: "#666",
-  },
-  refreshControl: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  videoContainer: {
-    flex: 1,
-    backgroundColor: "black",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  playerWrapper: {
-    width: width,
-    height: width * 0.5625, // 16:9 aspect ratio
-    backgroundColor: "black",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  closeButton: {
-    position: "absolute",
-    top: 40,
-    right: 20,
-    zIndex: 1,
   },
 });
 
