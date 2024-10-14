@@ -1,45 +1,39 @@
 import React from "react";
 import { Tabs } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { SafeAreaView, Platform, StyleSheet, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, Platform, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
+
+const TAB_ICON = {
+  index: ["book", "book-outline"],
+  practice: ["mic", "mic-outline"],
+  profile: ["person", "person-outline"],
+};
 
 export default function AppLayout() {
-  const insets = useSafeAreaInsets();
-
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={styles.container}>
+      <StatusBar style="dark" />
       <Tabs
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
-            let iconName;
-            if (route.name === "index") {
-              iconName = focused ? "book" : "book-outline";
-            } else if (route.name === "practice") {
-              iconName = focused ? "mic" : "mic-outline";
-            } else if (route.name === "profile") {
-              iconName = focused ? "person" : "person-outline";
-            }
-            return <Ionicons name={iconName} size={size} color={color} />;
+            const [focusedIcon, unfocusedIcon] = TAB_ICON[route.name] || [
+              null,
+              null,
+            ];
+            const iconName = focused ? focusedIcon : unfocusedIcon;
+            return iconName ? (
+              <Ionicons name={iconName} size={size} color={color} />
+            ) : null;
           },
-          tabBarStyle: ((route) => {
-            const routeName = route.name;
-            if (
-              routeName === "lesson/[id]" ||
-              routeName === "practice-session/[category]"
-            ) {
-              return { display: "none" };
-            }
-            return {
-              ...styles.tabBar,
-              height: 50 + insets.bottom,
-              paddingBottom: insets.bottom,
-            };
-          })(route),
+          tabBarStyle: styles.tabBar,
           tabBarActiveTintColor: "#007AFF",
           tabBarInactiveTintColor: "gray",
           tabBarLabelStyle: styles.tabBarLabel,
-          headerShown: false,
+          headerShown: true,
+          headerStyle: styles.header,
+          headerTitleStyle: styles.headerTitle,
+          contentStyle: styles.content,
         })}
       >
         <Tabs.Screen
@@ -67,16 +61,18 @@ export default function AppLayout() {
           name="lesson/[id]"
           options={{
             href: null,
+            tabBarStyle: { display: "none" },
           }}
         />
         <Tabs.Screen
           name="practice-session/[category]"
           options={{
             href: null,
+            tabBarStyle: { display: "none" },
           }}
         />
       </Tabs>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -84,6 +80,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#fff",
+  },
+  content: {
+    backgroundColor: "#fff",
+    paddingTop: Platform.OS === "ios" ? 50 : 30, // Add padding to account for status bar
+  },
+  header: {
+    backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#e0e0e0",
+  },
+  headerTitle: {
+    fontWeight: "bold",
+    fontSize: 18,
   },
   tabBar: {
     backgroundColor: "#fff",
