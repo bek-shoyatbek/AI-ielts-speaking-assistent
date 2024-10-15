@@ -11,42 +11,60 @@ import {
   ScrollView,
   Dimensions,
   Animated,
+  ListRenderItem,
+  Platform,
+  StatusBar,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { Audio } from "expo-av";
+import { Audio, AVPlaybackStatus } from "expo-av";
+import styles from "../../styles/practice-session.styles";
 
 const { width, height } = Dimensions.get("window");
 
-const practiceQuestions = {
+interface PracticeQuestions {
+  [key: string]: string;
+}
+
+const practiceQuestions: PracticeQuestions = {
   "part-1": "What do you do in your free time?",
   "part-2":
     "Describe a place you like to visit. You should say: where it is, how often you go there, what you do there, and explain why you like visiting this place.",
   "part-3": "How do you think leisure activities will change in the future?",
 };
 
+interface Message {
+  id: string;
+  text?: string;
+  audio?: string;
+  sender: "user" | "ai";
+}
+
 export default function PracticeSession() {
-  const { category } = useLocalSearchParams();
-  const [messages, setMessages] = useState<any>([]);
-  const [recording, setRecording] = useState();
-  const [sound, setSound] = useState();
-  const [isRecording, setIsRecording] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playingAudioId, setPlayingAudioId] = useState(null);
-  const [examplesModalVisible, setExamplesModalVisible] = useState(false);
-  const [ideasModalVisible, setIdeasModalVisible] = useState(false);
+  const { category } = useLocalSearchParams<{ category: string }>();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [recording, setRecording] = useState<Audio.Recording | undefined>();
+  const [sound, setSound] = useState<Audio.Sound | undefined>();
+  const [isRecording, setIsRecording] = useState<boolean>(false);
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const [examplesModalVisible, setExamplesModalVisible] =
+    useState<boolean>(false);
+  const [ideasModalVisible, setIdeasModalVisible] = useState<boolean>(false);
 
   // Animation
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    const initialQuestion = getPracticeQuestion();
     setMessages([
       {
         id: "1",
-        text: getPracticeQuestion(),
+        text: initialQuestion,
         sender: "ai",
       },
     ]);
+    playTextToSpeech(initialQuestion);
 
     Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
@@ -66,7 +84,7 @@ export default function PracticeSession() {
   }, []);
 
   useEffect(() => {
-    let animationLoop;
+    let animationLoop: Animated.CompositeAnimation | undefined;
     if (isRecording) {
       animationLoop = Animated.loop(
         Animated.sequence([
@@ -97,11 +115,32 @@ export default function PracticeSession() {
     };
   }, [isRecording]);
 
-  const getPracticeQuestion = () => {
-    return (
-      practiceQuestions[category as keyof typeof practiceQuestions] ||
-      "No question available for this category."
-    );
+  const playTextToSpeech = async (text: string) => {
+    try {
+      const encodedText = encodeURIComponent(text);
+      const { sound: newSound } = await Audio.Sound.createAsync(
+        {
+          uri: `https://s2tvrgs9-4300.euw.devtunnels.ms/api/v1/audio/stream?text=${encodedText}`,
+        },
+        { shouldPlay: true },
+      );
+      setSound(newSound);
+      setIsPlaying(true);
+      await newSound.playAsync();
+      newSound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+        if (status.isLoaded && status.didJustFinish) {
+          setIsPlaying(false);
+        }
+      });
+    } catch (err: any) {
+      Alert.alert("Failed to play text-to-speech", err.message);
+    }
+  };
+
+  const getPracticeQuestion = (): string => {
+    return category && practiceQuestions[category]
+      ? practiceQuestions[category]
+      : "No question available for this category.";
   };
 
   async function startRecording() {
@@ -118,7 +157,7 @@ export default function PracticeSession() {
         setRecording(recording);
         setIsRecording(true);
       }
-    } catch (err) {
+    } catch (err: any) {
       Alert.alert("Failed to start recording", err.message);
     }
   }
@@ -126,30 +165,38 @@ export default function PracticeSession() {
   async function stopRecording() {
     setIsRecording(false);
     try {
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      setRecording(undefined);
-      const userMessage = {
-        id: Date.now().toString(),
-        audio: uri,
-        sender: "user",
-      };
-      setMessages((prevMessages) => [...prevMessages, userMessage]);
+      if (recording) {
+        await recording.stopAndUnloadAsync();
+        const uri = recording.getURI();
+        setRecording(undefined);
+        if (uri) {
+          const userMessage: Message = {
+            id: Date.now().toString(),
+            audio: uri,
+            sender: "user",
+          };
+          setMessages((prevMessages) => [...prevMessages, userMessage]);
 
-      setTimeout(() => {
-        const aiMessage = {
-          id: (Date.now() + 1).toString(),
-          text: "I've received your audio message. Could you please elaborate more on your answer?",
-          sender: "ai",
-        };
-        setMessages((prevMessages) => [...prevMessages, aiMessage]);
-      }, 1000);
-    } catch (err) {
+          // Simulate API response
+          setTimeout(() => {
+            const aiResponse =
+              "I've received your audio message. Could you please elaborate more on your answer?";
+            const aiMessage: Message = {
+              id: (Date.now() + 1).toString(),
+              text: aiResponse,
+              sender: "ai",
+            };
+            setMessages((prevMessages) => [...prevMessages, aiMessage]);
+            playTextToSpeech(aiResponse);
+          }, 1000);
+        }
+      }
+    } catch (err: any) {
       Alert.alert("Failed to stop recording", err.message);
     }
   }
 
-  async function playSound(audio, messageId) {
+  async function playSound(audio: string, messageId: string) {
     try {
       if (sound) {
         await sound.unloadAsync();
@@ -167,18 +214,18 @@ export default function PracticeSession() {
       setIsPlaying(true);
       setPlayingAudioId(messageId);
       await newSound.playAsync();
-      newSound.setOnPlaybackStatusUpdate((status) => {
-        if (status.didJustFinish) {
+      newSound.setOnPlaybackStatusUpdate((status: AVPlaybackStatus) => {
+        if (status.isLoaded && status.didJustFinish) {
           setIsPlaying(false);
           setPlayingAudioId(null);
         }
       });
-    } catch (err) {
+    } catch (err: any) {
       Alert.alert("Failed to play sound", err.message);
     }
   }
 
-  const renderMessage = ({ item }) => (
+  const renderMessage: ListRenderItem<Message> = ({ item }) => (
     <View
       style={[
         styles.messageBubble,
@@ -186,17 +233,27 @@ export default function PracticeSession() {
       ]}
     >
       {item.text ? (
-        <Text
-          style={[
-            styles.messageText,
-            item.sender === "ai" && styles.aiMessageText,
-          ]}
-        >
-          {item.text}
-        </Text>
-      ) : (
+        <View>
+          <Text
+            style={[
+              styles.messageText,
+              item.sender === "ai" && styles.aiMessageText,
+            ]}
+          >
+            {item.text}
+          </Text>
+          {item.sender === "ai" && (
+            <TouchableOpacity
+              onPress={() => playTextToSpeech(item.text!)}
+              style={styles.playButton}
+            >
+              <Ionicons name="volume-high" size={24} color="#4A90E2" />
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : item.audio ? (
         <TouchableOpacity
-          onPress={() => playSound(item.audio, item.id)}
+          onPress={() => playSound(item.audio!, item.id)}
           disabled={isPlaying && playingAudioId !== item.id}
           style={styles.audioButton}
         >
@@ -209,13 +266,15 @@ export default function PracticeSession() {
             {isPlaying && playingAudioId === item.id ? "Pause" : "Play"}
           </Text>
         </TouchableOpacity>
-      )}
+      ) : null}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Practice Session: {category}</Text>
+      <View style={styles.headerContainer}>
+        <Text style={styles.title}>Practice Session: {category}</Text>
+      </View>
       <FlatList
         data={messages}
         renderItem={renderMessage}
@@ -297,124 +356,3 @@ export default function PracticeSession() {
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginVertical: 20,
-    textAlign: "center",
-  },
-  messageList: {
-    flex: 1,
-  },
-  messageListContent: {
-    paddingHorizontal: 15,
-    paddingBottom: 100, // Add extra padding at the bottom to account for the buttons
-  },
-  messageBubble: {
-    maxWidth: "80%",
-    padding: 10,
-    borderRadius: 20,
-    marginBottom: 10,
-  },
-  userMessage: {
-    alignSelf: "flex-end",
-    backgroundColor: "#007AFF",
-  },
-  aiMessage: {
-    alignSelf: "flex-start",
-    backgroundColor: "#E5E5EA",
-  },
-  messageText: {
-    color: "#fff",
-    fontSize: 16,
-  },
-  aiMessageText: {
-    color: "#000",
-  },
-  bottomContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 80,
-    backgroundColor: "#fff",
-    justifyContent: "center",
-    alignItems: "center",
-    borderTopWidth: 1,
-    borderTopColor: "#e0e0e0",
-  },
-  sideButtonsContainer: {
-    position: "absolute",
-    bottom: 90, // Adjust this value to change the distance from the bottom
-    right: 20,
-    flexDirection: "column",
-  },
-  sideButton: {
-    backgroundColor: "#4A90E2",
-    padding: 10,
-    borderRadius: 20,
-    marginBottom: 10,
-  },
-  micButton: {
-    backgroundColor: "#4A90E2",
-    padding: 20,
-    borderRadius: 40,
-  },
-  recordingButton: {
-    backgroundColor: "red",
-  },
-  audioButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0,0,0,0.1)",
-    padding: 10,
-    borderRadius: 20,
-  },
-  audioButtonText: {
-    color: "#fff",
-    marginLeft: 10,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  modalView: {
-    backgroundColor: "white",
-    borderRadius: 20,
-    padding: 20,
-    width: width * 0.8,
-    maxHeight: height * 0.7,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  modalTitle: {
-    fontSize: 24,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  closeButton: {
-    backgroundColor: "#4A90E2",
-    padding: 10,
-    borderRadius: 20,
-    alignItems: "center",
-    marginTop: 20,
-  },
-  closeButtonText: {
-    color: "white",
-    fontWeight: "bold",
-  },
-});
