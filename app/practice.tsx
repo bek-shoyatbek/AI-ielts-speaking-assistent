@@ -12,10 +12,10 @@ import { useRouter } from "expo-router";
 import Constants from "expo-constants";
 
 const partDescriptions = {
-  "Full Test": "Complete IELTS Speaking test simulation (11-14 minutes)",
-  "Part 1": "Introduction and interview (4-5 minutes)",
-  "Part 2": "Individual long turn (3-4 minutes)",
-  "Part 3": "Two-way discussion (4-5 minutes)",
+  FullTest: "Complete IELTS Speaking test simulation (11-14 minutes)",
+  PART1: "Introduction and interview (4-5 minutes)",
+  PART2: "Individual long turn (3-4 minutes)",
+  PART3: "Two-way discussion (4-5 minutes)",
 };
 
 const generalTips = [

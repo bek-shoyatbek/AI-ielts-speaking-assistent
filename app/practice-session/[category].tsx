@@ -2,37 +2,28 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   FlatList,
   TouchableOpacity,
   SafeAreaView,
   Alert,
   Modal,
   ScrollView,
-  Dimensions,
   Animated,
   ListRenderItem,
-  Platform,
-  StatusBar,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Audio, AVPlaybackStatus } from "expo-av";
 import styles from "../../styles/practice-session.styles";
+import axios from "axios";
 
 const API_URL = "https://s2tvrgs9-4300.euw.devtunnels.ms/api/v1";
-const { width, height } = Dimensions.get("window");
 
-interface PracticeQuestions {
-  [key: string]: string;
+interface PracticeQuestion {
+  content: string;
+  topic: string;
+  category: "PART1" | "PART2" | "PART3";
 }
-
-const practiceQuestions: PracticeQuestions = {
-  "part-1": "What do you do in your free time?",
-  "part-2":
-    "Describe a place you like to visit. You should say: where it is, how often you go there, what you do there, and explain why you like visiting this place.",
-  "part-3": "How do you think leisure activities will change in the future?",
-};
 
 interface Message {
   id: string;
@@ -52,28 +43,14 @@ export default function PracticeSession() {
   const [examplesModalVisible, setExamplesModalVisible] =
     useState<boolean>(false);
   const [ideasModalVisible, setIdeasModalVisible] = useState<boolean>(false);
+  const [questions, setQuestions] = useState<PracticeQuestion[]>([]);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState<number>(0);
 
-  // Animation
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    setMessages([
-      {
-        id: "1",
-        text: getPracticeQuestion(),
-        sender: "ai",
-      },
-    ]);
-
-    Audio.setAudioModeAsync({
-      // allowsRecordingIOS: true,
-      // playsInSilentModeIOS: true,
-      // interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
-      shouldDuckAndroid: true,
-      // interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
-      playThroughEarpieceAndroid: false,
-      staysActiveInBackground: true,
-    });
+    fetchQuestions();
+    setupAudio();
 
     return () => {
       if (sound) {
@@ -83,44 +60,48 @@ export default function PracticeSession() {
   }, []);
 
   useEffect(() => {
-    let animationLoop: Animated.CompositeAnimation | undefined;
-    if (isRecording) {
-      animationLoop = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.2,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 500,
-            useNativeDriver: true,
-          }),
-        ]),
-      );
-      animationLoop.start();
-    } else {
-      pulseAnim.setValue(1);
-      if (animationLoop) {
-        animationLoop.stop();
-      }
+    if (questions.length > 0) {
+      askQuestion(questions[currentQuestionIndex]);
     }
+  }, [questions, currentQuestionIndex]);
 
-    return () => {
-      if (animationLoop) {
-        animationLoop.stop();
-      }
+  const fetchQuestions = async () => {
+    try {
+      const res = await axios.get(
+        `${API_URL}/practice-questions/questions?category=${category}`,
+      );
+      setQuestions(res.data);
+    } catch (err) {
+      console.error("Failed to fetch questions:", err);
+      Alert.alert("Error", "Failed to fetch questions. Please try again.");
+    }
+  };
+
+  const setupAudio = async () => {
+    await Audio.setAudioModeAsync({
+      allowsRecordingIOS: true,
+      playsInSilentModeIOS: true,
+      shouldDuckAndroid: true,
+      playThroughEarpieceAndroid: false,
+      staysActiveInBackground: true,
+    });
+  };
+
+  const askQuestion = (question: PracticeQuestion) => {
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      text: question.content,
+      sender: "ai",
     };
-  }, [isRecording]);
+    setMessages((prevMessages) => [...prevMessages, newMessage]);
+    playTextToSpeech(question.content);
+  };
 
   const playTextToSpeech = async (text: string) => {
     try {
       const encodedText = encodeURIComponent(text);
       const { sound: newSound } = await Audio.Sound.createAsync(
-        {
-          uri: `${API_URL}/audio/stream?text=${encodedText}`,
-        },
+        { uri: `${API_URL}/audio/stream?text=${encodedText}` },
         { shouldPlay: true },
       );
       setSound(newSound);
@@ -134,18 +115,6 @@ export default function PracticeSession() {
     } catch (err: any) {
       Alert.alert("Failed to play text-to-speech", err.message);
     }
-  };
-
-  const getPracticeQuestion = (): string => {
-    const question =
-      category && practiceQuestions[category]
-        ? practiceQuestions[category]
-        : "No question available for this category.";
-
-    // Play the question using text-to-speech
-    playTextToSpeech(question);
-
-    return question;
   };
 
   async function startRecording() {
@@ -182,16 +151,11 @@ export default function PracticeSession() {
           };
           setMessages((prevMessages) => [...prevMessages, userMessage]);
 
+          // Move to the next question after a short delay
           setTimeout(() => {
-            const aiResponse =
-              "I've received your audio message. Could you please elaborate more on your answer?";
-            const aiMessage: Message = {
-              id: (Date.now() + 1).toString(),
-              text: aiResponse,
-              sender: "ai",
-            };
-            setMessages((prevMessages) => [...prevMessages, aiMessage]);
-            playTextToSpeech(aiResponse);
+            setCurrentQuestionIndex(
+              (prevIndex) => (prevIndex + 1) % questions.length,
+            );
           }, 1000);
         }
       }
@@ -311,7 +275,6 @@ export default function PracticeSession() {
           </TouchableOpacity>
         </Animated.View>
       </View>
-
       <Modal
         animationType="fade"
         transparent={true}
