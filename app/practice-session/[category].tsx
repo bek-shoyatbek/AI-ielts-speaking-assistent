@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Audio, AVPlaybackStatus } from "expo-av";
 import styles from "../../styles/practice-session.styles";
 
+const API_URL = "https://s2tvrgs9-4300.euw.devtunnels.ms/api/v1";
 const { width, height } = Dimensions.get("window");
 
 interface PracticeQuestions {
@@ -56,22 +57,20 @@ export default function PracticeSession() {
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    const initialQuestion = getPracticeQuestion();
     setMessages([
       {
         id: "1",
-        text: initialQuestion,
+        text: getPracticeQuestion(),
         sender: "ai",
       },
     ]);
-    playTextToSpeech(initialQuestion);
 
     Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+      // allowsRecordingIOS: true,
+      // playsInSilentModeIOS: true,
+      // interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
       shouldDuckAndroid: true,
-      interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+      // interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
       playThroughEarpieceAndroid: false,
       staysActiveInBackground: true,
     });
@@ -120,7 +119,7 @@ export default function PracticeSession() {
       const encodedText = encodeURIComponent(text);
       const { sound: newSound } = await Audio.Sound.createAsync(
         {
-          uri: `https://s2tvrgs9-4300.euw.devtunnels.ms/api/v1/audio/stream?text=${encodedText}`,
+          uri: `${API_URL}/audio/stream?text=${encodedText}`,
         },
         { shouldPlay: true },
       );
@@ -138,9 +137,15 @@ export default function PracticeSession() {
   };
 
   const getPracticeQuestion = (): string => {
-    return category && practiceQuestions[category]
-      ? practiceQuestions[category]
-      : "No question available for this category.";
+    const question =
+      category && practiceQuestions[category]
+        ? practiceQuestions[category]
+        : "No question available for this category.";
+
+    // Play the question using text-to-speech
+    playTextToSpeech(question);
+
+    return question;
   };
 
   async function startRecording() {
@@ -177,7 +182,6 @@ export default function PracticeSession() {
           };
           setMessages((prevMessages) => [...prevMessages, userMessage]);
 
-          // Simulate API response
           setTimeout(() => {
             const aiResponse =
               "I've received your audio message. Could you please elaborate more on your answer?";
