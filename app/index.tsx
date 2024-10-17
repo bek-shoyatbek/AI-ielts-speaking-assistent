@@ -34,7 +34,7 @@ const LessonsScreen: React.FC = () => {
     try {
       setLoading(true);
       const response = await fetch(
-        `https://s2tvrgs9-4300.euw.devtunnels.ms/api/v1/lessons`,
+        `https://5j23pkp4-4300.euw.devtunnels.ms/api/v1/lessons`,
       );
       if (!response.ok) {
         throw new Error("Failed to fetch lessons");

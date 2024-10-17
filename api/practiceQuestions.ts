@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "https://s2tvrgs9-4300.euw.devtunnels.ms/api/v1"; // Replace with your actual API URL
+const API_URL = "https://5j23pkp4-4300.euw.devtunnels.ms/api/v1"; // Replace with your actual API URL
 
 export const practiceQuestionsApi = {
   // Questions
